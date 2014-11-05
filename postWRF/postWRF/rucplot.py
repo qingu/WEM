@@ -20,6 +20,8 @@ from wrfout import WRFOut
 """
 RUC/RAP data will probably need to be cut down to fit the WRF domain
 it is compared to.
+
+This script should inherit WRFOut and override the 'get' command.
 """
 
 
@@ -35,10 +37,10 @@ class RUCPlot(Figure):
 
         self.C = config
         self.D = Defaults()
-        
+
         self.path_to_data = self.C.path_to_RUC
         self.output_root = self.C.output_root
-        
+
         self.t = t
         # Convert the datenum into time sequence
         self.ts = self.get_time_seq()
@@ -46,7 +48,7 @@ class RUCPlot(Figure):
         self.version = self.get_version()
         self.fname = self.get_fname()
         self.fpath = os.path.join(self.path_to_data,self.fname+'.nc')
-        
+
         self.nc = Dataset(self.fpath)
 
         # Original lat and lon grids
@@ -62,7 +64,7 @@ class RUCPlot(Figure):
             self.lons2D = self.cut_2D_array(self.lons)
             self.lats, self.lons = self.cut_lat_lon()
             self.y_dim = len(self.lats)
-            self.x_dim = len(self.lons)       
+            self.x_dim = len(self.lons)
             #self.lats1D = self.lats[:,self.lats.shape[1]/2]
             self.lats1D = self.lats
             #self.lons1D = self.lons[self.lons.shape[0]/2,:]
@@ -70,8 +72,8 @@ class RUCPlot(Figure):
         else:
             # Leave the dimensions the way they were
             self.y_dim = self.lats.shape[0]
-            self.x_dim = self.lats.shape[1]       
-     
+            self.x_dim = self.lats.shape[1]
+
 
         print('RUC file loaded from {0}'.format(self.fpath))
 
@@ -83,13 +85,13 @@ class RUCPlot(Figure):
         lons = self.lons1D
         lat_idx_max,lon_idx_min,a,b = gridded_data.getXY(lats,lons,self.limits['Nlim'],self.limits['Wlim'])
         lat_idx_min,lon_idx_max,c,d = gridded_data.getXY(lats,lons,self.limits['Slim'],self.limits['Elim'])
-        
+
         # Dummy variables for exact lat/lons returned
         del a,b,c,d
         lats_out = lats[lat_idx_min:lat_idx_max]
         lons_out = lons[lon_idx_min:lon_idx_max]
         return lats_out, lons_out
- 
+
 
 
     def cut_2D_array(self,data_in):
@@ -97,15 +99,15 @@ class RUCPlot(Figure):
         depending of specified limits
         """
         lats = self.lats1D
-        lons = self.lons1D 
+        lons = self.lons1D
         lat_idx_max,lon_idx_min,a,b = gridded_data.getXY(lats,lons,self.limits['Nlim'],self.limits['Wlim'])
         lat_idx_min,lon_idx_max,c,d = gridded_data.getXY(lats,lons,self.limits['Slim'],self.limits['Elim'])
-        
+
         # Dummy variables for exact lat/lons returned
         del a,b,c,d
         data_out = data_in[lat_idx_min:lat_idx_max+1,lon_idx_min:lon_idx_max+1]
         return data_out
- 
+
     def get_version(self):
         """Returns the version of RUC or RUC file
         """
@@ -121,7 +123,7 @@ class RUCPlot(Figure):
         elif (yr>2004):
             version = 0
         return version
-        
+
 
     def plot(self,variables,lv,**kwargs):
         for va in variables:
@@ -151,31 +153,31 @@ class RUCPlot(Figure):
         u = self.cut_2D_array(u_all)
         v = self.cut_2D_array(v_all)
         m, x, y  = self.basemap_setup(**kwargs)
-        """ 
+        """
         # Density depends on which version
         # Wanting to match 3 km WRF (which had 2.5 density)
         # Should work out dx, dy in __init__ method!
-        
+
         WRF_density = 2.5
         WRF_res = 3.0
 
         if self.version == 3:
             RUC_res = 13.0
-        
+
         density = WRF_density * RUC_res/WRF_res
         """
         density = 2.5
 
         #x = N.array(range(u.shape[0]))
         #y = N.array(range(v.shape[1]))
-        
+
         #pdb.set_trace()
         #m.streamplot(x[self.x_dim/2,:],y[:,self.y_dim/2],u,v,density=density,linewidth=0.75,color='k')
         #m.streamplot(x[y.shape[1]/2,:],y[:,x.shape[0]/2],u,v,density=density,linewidth=0.75,color='k')
         #plt.streamplot(x[:,0],y[0,:],u,v)#,density=density,linewidth=0.75,color='k')
         m.streamplot(y[0,:],x[:,0],u,v,density=density,linewidth=0.75,color='k')
         #m.quiver(x,y,u,v)
-        
+
         if self.C.plot_titles:
             title = utils.string_from_time('title',self.t)
             plt.title(title)
@@ -220,7 +222,7 @@ class RUCPlot(Figure):
             data = self.compute_wind10(self.nc)
         elif va == 'shear':
             data = self.compute_shear(self.nc,**kwargs)
-        else:       
+        else:
             key = self.get_key(va)
             data = self.nc.variables[key][:]
         return data
@@ -228,7 +230,7 @@ class RUCPlot(Figure):
     def get_latlon(self):
         lat_key = self.get_key('lats')
         lon_key = self.get_key('lons')
-        
+
         lats = self.nc.variables[lat_key]
         lons = self.nc.variables[lon_key]
 
@@ -261,7 +263,7 @@ class RUCPlot(Figure):
             prefix = 'ruc2anl_130_'
         elif self.version==3:
             prefix = 'rap_130_'
-        else:     
+        else:
             raise Exception
 
         fname = '{0}{1:04d}{2:02d}{3:02d}_{4:02d}00_000'.format(prefix,*self.ts)
@@ -313,7 +315,7 @@ class RUCPlot(Figure):
 
         # Draw meridians etc with wrff.lat/lon spacing
         # Default should be a tenth of width of plot, rounded to sig fig
-        
+
         mx, my = N.meshgrid(self.lons,self.lats)
         y,x = m(mx,my)
         #pdb.set_trace()
@@ -357,8 +359,8 @@ class RUCPlot(Figure):
                                 topm,Z[:,i,j],range(37)))
                 botidx[i,j] = round(N.interp(
                                 botm,Z[:,i,j],range(37)))
-                ushear[i,j] = u[topidx[i,j],i,j] - u[botidx[i,j],i,j] 
-                vshear[i,j] = v[topidx[i,j],i,j] - v[botidx[i,j],i,j] 
+                ushear[i,j] = u[topidx[i,j],i,j] - u[botidx[i,j],i,j]
+                vshear[i,j] = v[topidx[i,j],i,j] - v[botidx[i,j],i,j]
 
         # Find indices of bottom and top levels
         # topidx = N.where(abs(Z-topm) == abs(Z-topm).min(axis=1))
@@ -375,8 +377,8 @@ class RUCPlot(Figure):
         """ Version '3' for RAP has U10 and V10
         """
         u = self.get('U')[-1,...]
-        v = self.get('V')[-1,...]      
-        return N.sqrt(u**2 + v**2)  
+        v = self.get('V')[-1,...]
+        return N.sqrt(u**2 + v**2)
 
     def get_key(self,va):
         """
@@ -392,15 +394,63 @@ class RUCPlot(Figure):
 
         KEYS['U10'] = {3:'UGRD_P0_L103_GLC0'}
         KEYS['V10'] = {3:'VGRD_P0_L103_GLC0'}
-               
+
         KEYS['Td'] = {0:'DPT_252_HTGL'}
 
         try:
             key = KEYS[va][self.version]
-        except KeyError:        
+        except KeyError:
             print("Choose variable")
             raise Exception
         else:
             return key
 
+    def compute_frontogenesis():
+        dp = 15 # hPa to compute vertical gradients
+        tidx = self.get_time_idx(time)
+        if (tidx == 0) or (tidx == self.wrf_times.shape[0]-1):
+            return None
+        elif level == 2000:
+            pass
+        elif isinstance(level,int):
+            tidxs = (tidx-1,tidx,tidx+1)
 
+            # Get sizes of array
+            ny,nx = self.get_p('U',tidx,level).shape
+
+            # Initialise them
+            U = N.zeros([3,3,ny,nx])
+            V = N.zeros_like(U)
+            W = N.zeros_like(U)
+            T = N.zeros_like(U)
+            # omega = N.zeros_like(U)
+
+            for n, t in enumerate(tidxs):
+                U[n,...] = self.get_p('U',t,level)
+                V[n,...] = self.get_p('V',t,level)
+                W[n,...] = self.get_p('W',t,level)
+
+                # 3D array has dimensions (vertical, horz, horz)
+                T[n,...] = self.get_p('T',t,(level-dp,level,level+dp))
+
+                # Compute omega
+                # P = rho* R* drybulb
+                # drybulb = T/((P0/P)^(R/cp)
+
+            drybulb = 273.15 + (T/((100000.0/(level*100.0))**(mc.R/mc.cp)))
+            rho = (level*100.0)/(mc.R*drybulb)
+            omega = -rho * mc.g * W
+
+            # Time difference in sec
+            dt = self.wrf_times_epoch[tidx+1]-self.wrf_times_epoch[tidx]
+            dTdt, dTdz, dTdy, dTdx = N.gradient(T,dt,dp*100.0,self.dy, self.dx)
+            # Gradient part
+            grad = (dTdx**2 + dTdy**2)**0.5
+            # Full derivative - value wrong for dgraddz here
+            dgraddt, dgraddz, dgraddy, dgraddx = N.gradient(grad,dt,dp*100.0,
+                                                            self.dy, self.dx)
+            # Full equation
+            Front = (dgraddt[1,1,:,:] + U[1,1,:,:]*dgraddx[1,1,:,:] +
+                        V[1,1,:,:]*dgraddy[1,1,:,:])
+                        # + omega[1,1,:,:]*dgraddz[1,1,:,:]
+        return Front

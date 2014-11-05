@@ -1,277 +1,184 @@
+"""
+Top-down 2D plots, which are so common in meteorology
+that they get their own file here.
+
+Subclass of Figure.
+"""
+
 import pdb
 import matplotlib as M
 M.use('Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import numpy as N
+import collections
+import os
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+from wrfout import WRFOut
 from defaults import Defaults
 from figure import Figure
-import WEM.utils.utils as utils
-import scales
+import WEM.utils as utils
+from scales import Scales
+import stats
 
 class BirdsEye(Figure):
-    def __init__(self,config,wrfout):
-        self.C = config
-        if not isinstance(wrfout,list):
-            self.W = wrfout
-        self.D = Defaults()
-        self.p2p = self.C.output_root
-        print self.p2p
+    def __init__(self,wrfout,ax=0,fig=0):
+        super(BirdsEye,self).__init__(wrfout,ax=ax,fig=fig)
 
-    def plot_data(self,data,mplcommand,fpath,pt,V=0):
+    def get_plot_arguments(self,cmap=False,clvs=False):
+        """
+        Returns colourmap and contouring levels
+
+        Options keyword arguments:
+        clvs    :   manually override contour levels
+        """
+        data = self.data.reshape((self.la_n,self.lo_n))
+
+        # List of args and dictionary of kwargs
+        plotargs = [self.x,self.y,data]
+        plotkwargs = {}
+
+        # if self.mplcommand == 'contour':
+            # multiplier = S.get_multiplier(vrbl,lv)
+        if clvs is not False:
+            plotkwargs['levels'] = clvs
+
+        if cmap is not False:
+            # cmap = eval('M.cm.{0}'.format(cmap))
+            plotkwargs['cmap'] = cmap
+        # import pdb; pdb.set_trace()
+        return plotargs, plotkwargs
+
+    # Old plot_data
+    def plot2D(self,data,fname,outdir,plottype='contourf',
+                    save=1,smooth=1,lats=False,lons=False,
+                    clvs=False,cmap=False,title=False,colorbar=True):
+
         """
         Generic method that plots any matrix of data on a map
 
         Inputs:
-        data        :   lat/lon matrix of data
-        m           :   basemap instance
-        mplcommand  :   contour or contourf
-        fpath       :   absolute filepath including name
-        V           :   scale for contours
+        data        :   2D matrix of data
+        outdir      :   path to plots
+        outf        :   filename for output (with or without .png)
 
+        Optional:
+        plottype    :   matplotlib function for plotting
+        smooth      :   Gaussian smooth by this many grid spaces
+        clvs        :   scale for contours
+        title       :   title on plot
+        save        :   whether to save to file
         """
         # INITIALISE
-        self.fig = plt.figure()
-        self.fig = self.figsize(8,8,self.fig)     # Create a default figure size if not set by user
-        self.bmap,x,y = self.basemap_setup()
+        self.data = data
+        self.bmap,self.x,self.y = self.basemap_setup(smooth=smooth,lats=lats,
+                                                    lons=lons,)#ax=self.ax)
+        self.la_n = self.data.shape[-2]
+        self.lo_n = self.data.shape[-1]
 
-        if mplcommand == 'contour':
-            if not V:
-                self.bmap.contour(x,y,data)
-            else:
-                self.bmap.contour(x,y,data,V)
-        elif mplcommand == 'contourf':
-            if not V:
-                self.bmap.contourf(x,y,data,alpha=0.5)
-            else:
-                self.bmap.contourf(x,y,data,V,alpha=0.5)
+        plotargs, plotkwargs = self.get_plot_arguments(clvs=clvs,cmap=cmap)
 
-
-
-        # LABELS, TITLES etc
-        """
-        Change these to hasattr!
-        """
-        #if self.C.plot_titles:
-        title = utils.string_from_time('title',pt,tupleformat=0)
-        plt.title(title)
-        #if self.C.plot_colorbar:
-        plt.colorbar(orientation='horizontal')
-
-        # SAVE FIGURE
-        datestr = utils.string_from_time('output',pt,tupleformat=0)
-        self.fname = self.create_fname(fpath) # No da variable here
-        self.save(self.fig,self.p2p,self.fname)
-        self.fig.clf()
-
-    def plot2D(self,va,vardict,da=0,na=0):
-        """
-        Inputs:
-
-        va      :   variable
-
-        vardict     :   dictionary of
-            pt  :   plot time
-            lv  :   level
-            vc  :   vertical coordinate system
-
-        Other arguments:
-
-        da      : dictionary of:
-            tla     :   top limit of latitude
-            bla     :   bottom limit of latitude
-            llo     :   left limit of longitude
-            rlo     :   right limit of longitude
-
-        plottype    :   contourf by default
-
-        """
-        # INITIALISE
-        #en = self.W.path
-        self.fig = plt.figure()
-        self.fig = self.figsize(8,8,self.fig)     # Create a default figure size if not set by user
-        sm = vardict.get('smooth',1)
-        self.bmap,x,y = self.basemap_setup(smooth=sm)
-
-        # Unpack dictionary
-        lv = vardict['lv']
-        pt = vardict['pt']
-        plottype = vardict.get('plottype','contourf')
-        # pdb.set_trace()
-
-        # Get indices for time, level, lats, lons
-        # TIME
-        if pt == 'all':
-            time_idx = slice(None,None)
-        elif pt == 'range':
-            start_frame = self.W.get_time_idx(vardict['itime'], tuple_format=1)
-            end_frame = self.W.get_time_idx(vardict['ftime'], tuple_format=1)
-            time_idx = slice(start_frame,end_frame)
+        # import pdb; pdb.set_trace()
+        if plottype == 'contour':
+            f1 = self.bmap.contour(*plotargs,**plotkwargs)
+        elif plottype == 'contourf':
+            f1 = self.bmap.contourf(*plotargs,**plotkwargs)
+        elif plottype == 'pcolor':
+            f1 = self.bmap.pcolor(*plotargs,**plotkwargs)
+        elif plottype == 'pcolormesh':
+            f1 = self.bmap.pcolormesh(*plotargs,**plotkwargs)
+        elif plottype == 'scatter':
+            f1 = self.bmap.scatter(*plotargs,**plotkwargs)
         else:
-            time_idx = self.W.get_time_idx(pt)
-
-        # LAT/LON
-        #if 'smooth' in vardict:
-            #s = vardict['smooth']
-  
-        lat_sl, lon_sl = self.get_limited_domain(da,smooth=sm)
-
-        # LEVEL
-        vc = vardict['vc']
-        if vc == 'surface':
-            lv_idx = 0
-        elif lv == 'all':
-            lv_idx = 'all'
-        else:
-            print("Need to sort other levels")
+            print("Specify correct plot type.")
             raise Exception
 
-        lv_na = utils.get_level_naming(va,**vardict)
-
-        """
-           def plot_strongest_wind(self,dic):
-                itime = dic['itime']
-                ftime = dic['ftime']
-                V = dic.get('range',(10,32.5,2.5))
-                F = BirdsEye(self.C,W
-
-        """
-
-        # Now clear dictionary of old settings
-        # They will be replaced with indices
-        # vardict.pop('pt')
-        # vardict.pop('lv')
-        # try:
-            # vardict.pop('da')
-        # except KeyError:
-            # pass
-
-        # FETCH DATA
-        PS = {'t': time_idx, 'lv': lv_idx, 'la': lat_sl, 'lo': lon_sl}
-        data = self.W.get(va,PS,**vardict)
-
-        la_n = data.shape[-2]
-        lo_n = data.shape[-1]
-
-        # COLORBAR, CONTOURING
-        cm, clvs = scales.get_cm(va,**vardict)
-        multiplier = scales.get_multiplier(va,**vardict)
-        # Override contour levels if specified
-        # clvs = vardict.get('range',clvs_default)
-
-        # pdb.set_trace()
-        if cm:
-            plotargs = (x,y,data.reshape((la_n,lo_n)),clvs)
-            cmap = cm
-            #self.bmap.contourf(x,y,data.reshape((la_n,lo_n)),clvs,{'cmap':cm})
-        elif isinstance(clvs,N.ndarray):
-            #self.bmap.contourf(x,y,data.reshape((la_n,lo_n)),clvs,cmap=plt.cm.jet)
-            if plottype == 'contourf':
-                plotargs = (x,y,data.reshape((la_n,lo_n)),clvs)
-                cmap = plt.cm.jet
-            else:
-                plotargs = (x,y,data.reshape((la_n,lo_n)),clvs)
-        else:
-            plotargs = (x,y,data.reshape((la_n,lo_n)))
-            cmap = plt.cm.jet
-            #self.bmap.contourf(x,y,data.reshape((la_n,lo_n)))
-
-
-        if plottype == 'contourf':
-            self.bmap.contourf(*plotargs,cmap=cmap)
-        elif plottype == 'contour':
-            ctplt = self.bmap.contour(*plotargs,colors='k')
-            scaling_func = M.ticker.FuncFormatter(lambda x, pos:'{0:d}'.format(int(x*multiplier)))
-            plt.clabel(ctplt, inline=1, fmt=scaling_func, fontsize=9, colors='k')
-
-        # LABELS, TITLES etc
-        if self.C.plot_titles:
-            title = utils.string_from_time('title',pt,**vardict)
+        if isinstance(title,basestring):
             plt.title(title)
-        if plottype == 'contourf' and self.C.colorbar:
-            plt.colorbar(orientation='horizontal')
-        
-        # SAVE FIGURE
-        datestr = utils.string_from_time('output',pt)
-        if not na:
-            # Use default naming scheme
-            na = (va,lv_na,datestr)
-        else:
-            # Come up with scheme...
-            print("Coming soon: ability to create custom filenames")
-            raise Exception
-        self.fname = self.create_fname(*na) # No da variable here
-        self.save(self.fig,self.p2p,self.fname)
-        plt.close()
+        if colorbar:
+            self.fig.colorbar(f1,orientation='vertical')
+        if save:
+            self.save(outdir,fname)
 
-    def plot_streamlines(self,lv,pt,da=0):
-        self.fig = plt.figure()
+        plt.close(self.fig)
+
+    def plot_streamlines(self,U,V,outdir,fname,lats=False,lons=False,smooth=1,
+                            title=False,lw_speed=False):
+        """
+        Plot streamlines.
+
+        U       :   U-component of wind (nx x ny)
+        V       :   V-component of wind (same dimensions)
+
+        lw_speed    :   linewidth is proportional to wind speed
+        """
         m,x,y = self.basemap_setup()
 
-        time_idx = self.W.get_time_idx(pt)
+        if lw_speed:
+            wind = N.sqrt(U**2 + V**2)
+            lw = 5*wind/wind.max()
+        else:
+            lw = 1
 
+        if smooth>1:
+            U = stats.gauss_smooth(U,smooth)
+            V = stats.gauss_smooth(V,smooth)
+
+        m.streamplot(x[self.W.x_dim/2,:],y[:,self.W.y_dim/2],U,V,
+                        density=1.8,linewidth=lw,color='k',arrowsize=3)
+
+        if isinstance(title,basestring):
+            self.ax.set_title(title)
+
+        self.save(outdir,fname)
+
+    def spaghetti(self,t,lv,va,contour,wrfouts,outpath,da=0,dom=0):
+        """
+        wrfouts     :   list of wrfout files
+
+        Only change dom if there are multiple domains.
+        """
+        m,x,y = self.basemap_setup()
+
+        time_idx = self.W.get_time_idx(t)
+
+        colours = utils.generate_colours(M,len(wrfouts))
+
+        # import pdb; pdb.set_trace()
         if lv==2000:
             lv_idx = None
         else:
             print("Only support surface right now")
-            raise Exception 
+            raise Exception
 
         lat_sl, lon_sl = self.get_limited_domain(da)
 
         slices = {'t': time_idx, 'lv': lv_idx, 'la': lat_sl, 'lo': lon_sl}
 
-        if lv == 2000:
-            u = self.W.get('U10',slices)[0,:,:]
-            v = self.W.get('V10',slices)[0,:,:]
-        else:
-            u = self.W.get('U',slices)[0,0,:,:]
-            v = self.W.get('V',slices)[0,0,:,:]
-        # pdb.set_trace()
-        
-        #div = N.sum(N.dstack((N.gradient(u)[0],N.gradient(v)[1])),axis=2)*10**4
-        #vort = (N.gradient(v)[0] - N.gradient(u)[1])*10**4
-        #pdb.set_trace()
-        lv_na = utils.get_level_naming('wind',lv=2000)
+        # self.ax.set_color_cycle(colours)
+        ctlist = []
+        for n,wrfout in enumerate(wrfouts):
+            self.W = WRFOut(wrfout)
+            data = self.W.get(va,slices)[0,...]
+            # m.contour(x,y,data,levels=[contour,])
+            ct = m.contour(x,y,data,colors=[colours[n],],levels=[contour,],label=wrfout.split('/')[-2])
+            print("Plotting contour level {0} for {1} from file \n {2}".format(
+                            contour,va,wrfout))
+            # ctlist.append(ct)
+            # self.ax.legend()
 
-        m.streamplot(x[self.W.x_dim/2,:],y[:,self.W.y_dim/2],u,v,
-                        density=2.5,linewidth=0.75,color='k')
-        #div_Cs = N.arange(-30,31,1)
-        #divp = m.contourf(x,y,vort,alpha=0.6)
-        #divp = m.contour(x,y,vort)
+        # labels = [w.split('/')[-2] for w in wrfouts]
+        # print labels
+        # self.fig.legend(handles=ctlist)
+        # plt.legend(handles=ctlist,labels=labels)
+        #labels,ncol=3, loc=3,
+        #                bbox_to_anchor=[0.5,1.5])
 
-        #plt.colorbar(divp,orientation='horizontal')
-        if self.C.plot_titles:
-            title = utils.string_from_time('title',pt)
-            plt.title(title)
-        datestr = utils.string_from_time('output',pt)
-        na = ('streamlines',lv_na,datestr)
-        self.fname = self.create_fname(*na) 
-        self.save(self.fig,self.p2p,self.fname)
-        plt.clf()
-        plt.close()
-
-    def basemap_setup(self,smooth=1):
-        # Fetch settings
-        basemap_res = getattr(self.C,'basemap_res',self.D.basemap_res)
-
-        width_m = self.W.dx*(self.W.x_dim-1)
-        height_m = self.W.dy*(self.W.y_dim-1)
-
-        m = Basemap(
-            projection='lcc',width=width_m,height=height_m,
-            lon_0=self.W.cen_lon,lat_0=self.W.cen_lat,lat_1=self.W.truelat1,
-            lat_2=self.W.truelat2,resolution=basemap_res,area_thresh=500
-            )
-        m.drawcoastlines()
-        m.drawstates()
-        m.drawcountries()
-
-        # Draw meridians etc with wrff.lat/lon spacing
-        # Default should be a tenth of width of plot, rounded to sig fig
-
-        s = slice(None,None,smooth)
-        x,y = m(self.W.lons[s,s],self.W.lats[s,s])
-        return m, x, y
-
-
+        datestr = utils.string_from_time('output',t,tupleformat=0)
+        lv_na = utils.get_level_naming(va,lv)
+        naming = ['spaghetti',va,lv_na,datestr]
+        if dom:
+            naming.append(dom)
+        fname = self.create_fname(*naming)
+        self.save(outpath,fname)
